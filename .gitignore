@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# PyInstaller (per build_exe.bat jederzeit neu baubar)
+build/
+dist/
+
+# Editor / OS
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini

@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """Greifer-Test: oeffnen und schliessen ohne den vollen Pick-and-Place-Ablauf."""
 
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+# ^ Projekt-Root in den Pfad, da dieses Skript im Unterordner archiv/ liegt.
+
 from pick_and_placeV1 import CriRobot, ROBOT_IP, ROBOT_PORT
 import time
 

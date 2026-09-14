@@ -10,6 +10,10 @@ Voraussetzungen:
 
 import logging
 import random
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+# ^ Projekt-Root in den Pfad, da dieses Skript im Unterordner archiv/ liegt.
+
 from libs.CRI_Python_Lib.cri_lib import CRIController, CRIConnectionError
 
 logging.basicConfig(level=logging.DEBUG, format="%(name)s %(levelname)s: %(message)s")

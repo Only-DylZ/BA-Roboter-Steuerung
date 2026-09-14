@@ -8,6 +8,10 @@ import time
 import tkinter as tk
 from tkinter import ttk, scrolledtext, messagebox
 
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+# ^ Projekt-Root in den Pfad, da dieses Skript im Unterordner archiv/ liegt.
+
 try:
     from libs.CRI_Python_Lib.cri_lib import CRIController, CRIConnectionError
     CRI_AVAILABLE = True
