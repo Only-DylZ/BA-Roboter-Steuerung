@@ -74,6 +74,14 @@ DEFAULTS_SIM_BASE = {
     "fill_cmd":         "feeder 1",
     "fill_wait":        "2.0",
     "velocity":         "80.0",
+    # Genauigkeitstest (zwei Ablageorte + Anfahr-Offset)
+    "acc_p1x":          "0.0",
+    "acc_p1y":          "-300.0",
+    "acc_p1z":          "140.0",
+    "acc_p2x":          "100.0",
+    "acc_p2y":          "-300.0",
+    "acc_p2z":          "140.0",
+    "acc_offset":       "20.0",
 }
 
 DEFAULTS_PROD_BASE = {
@@ -106,6 +114,55 @@ DEFAULTS_PROD_BASE = {
     "fill_cmd":         "feeder 1",
     "fill_wait":        "2.0",
     "velocity":         "80.0",
+    # Genauigkeitstest (zwei Ablageorte + Anfahr-Offset)
+    "acc_p1x":          "0.0",
+    "acc_p1y":          "-300.0",
+    "acc_p1z":          "140.0",
+    "acc_p2x":          "100.0",
+    "acc_p2y":          "-300.0",
+    "acc_p2z":          "140.0",
+    "acc_offset":       "20.0",
+}
+
+# Genauigkeitstest-Defaults (eigener Modus). Netzwerk/Werkzeug/Safe-Joints wie
+# Produktion; die Ablageorte kommen aus genauigkeitstestV1.py.
+DEFAULTS_ACC_BASE = {
+    "eye_ip":           "",
+    "eye_port":         "",
+    "robot_ip":         "192.168.3.11",
+    "robot_port":       "3920",
+    "num_parts":        "4",
+    "endlos":           "0",
+    "test_mode":        "0",
+    "endlos_x":         "0.0",
+    "endlos_y":         "-300.0",
+    "endlos_z_safe":    "150.0",
+    "endlos_z_drop":    "140.0",
+    "pick_cx":          "440.0",
+    "pick_cy":          "-5.0",
+    "safe_pick_z":      "150.0",
+    "grip_z":           "140.0",
+    "tool_a":           "180.0",
+    "tool_b":           "0.0",
+    "tool_c":           "180.0",
+    "rotate_deg":       "-90.0",
+    "safe_joints":      "0.0 -18.7 108.0 0.0 90.0 0.0",
+    "place_x":          "0.0",
+    "place_x_step":     "50.0",
+    "place_y":          "-300.0",
+    "place_z_safe":     "150.0",
+    "place_z_drop":     "140.0",
+    "min_parts":        "1",
+    "fill_cmd":         "feeder 1",
+    "fill_wait":        "2.0",
+    "velocity":         "60.0",
+    "acc_p1x":          "0.0",
+    "acc_p1y":          "-300.0",
+    "acc_p1z":          "140.0",
+    "acc_p2x":          "100.0",
+    "acc_p2y":          "-300.0",
+    "acc_p2z":          "140.0",
+    "acc_offset":       "20.0",
 }
 
 
@@ -147,13 +204,34 @@ def _fmt_default(val):
     return str(val)
 
 
-def _defaults_from_script(base, module):
+# Mapping fuer den Genauigkeitstest -> Konstanten in genauigkeitstestV1.py.
+_ACC_PARAM_MAP = {
+    "robot_ip":   "ROBOT_IP",
+    "robot_port": "ROBOT_PORT",
+    "tool_a":     "TOOL_A_DOWN",
+    "tool_b":     "TOOL_B_DOWN",
+    "tool_c":     "TOOL_C_DOWN",
+    "safe_joints": "SAFE_ROTATE_JOINTS",
+    "velocity":   "MOVE_VELOCITY",
+    "acc_p1x":    "PLACE1_X",
+    "acc_p1y":    "PLACE1_Y",
+    "acc_p1z":    "PLACE1_Z",
+    "acc_p2x":    "PLACE2_X",
+    "acc_p2y":    "PLACE2_Y",
+    "acc_p2z":    "PLACE2_Z",
+    "acc_offset": "SAFE_Z_OFFSET",
+}
+
+
+def _defaults_from_script(base, module, param_map=None):
     # Startet von den Fallback-Werten und ueberschreibt jedes Feld, fuer das im
     # Skript eine Konstante existiert. Fehlt das Modul (Import fehlgeschlagen)
     # oder eine Konstante, bleibt der Fallback erhalten.
+    if param_map is None:
+        param_map = _SCRIPT_PARAM_MAP
     d = dict(base)
     if module is not None:
-        for gui_key, attr in _SCRIPT_PARAM_MAP.items():
+        for gui_key, attr in param_map.items():
             if hasattr(module, attr):
                 d[gui_key] = _fmt_default(getattr(module, attr))
     return d
@@ -167,9 +245,14 @@ try:
     import pick_and_placeV1_SIM as _sim_script
 except Exception:
     _sim_script = None
+try:
+    import genauigkeitstestV1 as _acc_script
+except Exception:
+    _acc_script = None
 
 DEFAULTS_SIM  = _defaults_from_script(DEFAULTS_SIM_BASE,  _sim_script)
 DEFAULTS_PROD = _defaults_from_script(DEFAULTS_PROD_BASE, _prod_script)
+DEFAULTS_ACC  = _defaults_from_script(DEFAULTS_ACC_BASE,  _acc_script, _ACC_PARAM_MAP)
 
 
 class _StopException(Exception):
@@ -718,6 +801,9 @@ class PickPlaceApp:
         self._recipe_var = tk.StringVar()
         self._recipe_combo = None
         self._recipe_sec   = None
+        # Merkt sich, ob die Rezeptliste in dieser Sitzung schon automatisch
+        # geladen wurde -> Auto-Laden feuert nur einmal.
+        self._recipe_autoloaded = False
 
         self._build_ui()
         self._poll()
@@ -749,6 +835,7 @@ class PickPlaceApp:
         for col, val, lbl in [
             (1, "sim",  "Simulation  (iRC-Sim + simulierter EYE+)"),
             (2, "prod", "Produktion  (echte Hardware)"),
+            (3, "acc",  "Genauigkeitstest  (Roboter ohne EYE+)"),
         ]:
             tk.Radiobutton(
                 self._mode_bar,
@@ -815,6 +902,7 @@ class PickPlaceApp:
         self._eye_entries = [e1, e2]
 
         f = sec("Aufgabe")
+        self._sec_aufgabe = f
         fld(f, "Anzahl Teile:",  "num_parts",    0, 0, 6)
         ttk.Checkbutton(
             f, text="Endlos-Modus  (laeuft bis STOP)",
@@ -845,7 +933,23 @@ class PickPlaceApp:
             (RECIPE_ID_TEST, "Rezept_Testmodus"),
         ])
 
+        # ── Genauigkeitstest (nur Modus "acc") ────────────────────────────────
+        f = sec("Genauigkeitstest  [mm]")
+        self._sec_acc = f
+        ttk.Label(f, text="Ablageort 1:", font=("Segoe UI", 8, "bold")).grid(
+            row=0, column=0, columnspan=6, sticky="w", pady=(0, 1))
+        fld(f, "X:", "acc_p1x", 1, 0, 8)
+        fld(f, "Y:", "acc_p1y", 1, 1, 8)
+        fld(f, "Z:", "acc_p1z", 1, 2, 8)
+        ttk.Label(f, text="Ablageort 2:", font=("Segoe UI", 8, "bold")).grid(
+            row=2, column=0, columnspan=6, sticky="w", pady=(6, 1))
+        fld(f, "X:", "acc_p2x", 3, 0, 8)
+        fld(f, "Y:", "acc_p2y", 3, 1, 8)
+        fld(f, "Z:", "acc_p2z", 3, 2, 8)
+        fld(f, "Anfahr-Offset Z:", "acc_offset", 4, 0, 8)
+
         f = sec("Pick-Geometrie  [mm]")
+        self._sec_pickgeom = f
         fld(f, "Mitte X:",   "pick_cx",     0, 0, 8)
         fld(f, "Mitte Y:",   "pick_cy",     0, 1, 8)
         fld(f, "Z-Safe:",    "safe_pick_z", 1, 0, 8)
@@ -864,6 +968,7 @@ class PickPlaceApp:
             row=2, column=0, columnspan=6, sticky="ew")
 
         f = sec("Ablageposition  [mm]  (Normal-Modus)")
+        self._sec_place_normal = f
         fld(f, "X-Start:",   "place_x",      0, 0, 8)
         fld(f, "X-Schritt:", "place_x_step", 0, 1, 8)
         fld(f, "Y:",         "place_y",      1, 0, 8)
@@ -871,12 +976,14 @@ class PickPlaceApp:
         fld(f, "Z-Ablegen:", "place_z_drop", 2, 1, 8)
 
         f = sec("Ablageposition  [mm]  (Endlos-Modus)")
+        self._sec_place_endlos = f
         fld(f, "X:",         "endlos_x",      0, 0, 8)
         fld(f, "Y:",         "endlos_y",      0, 1, 8)
         fld(f, "Z-Safe:",    "endlos_z_safe", 1, 0, 8)
         fld(f, "Z-Ablegen:", "endlos_z_drop", 1, 1, 8)
 
         f = sec("Cube-Fuellung")
+        self._sec_cube = f
         fld(f, "Min. Teile auf Platte:", "min_parts", 0, 0, 4)
         fld(f, "Wartezeit [s]:",         "fill_wait", 0, 1, 5)
         ttk.Label(f, text="Feeder-Befehl:").grid(row=1, column=0, sticky="w", pady=(4, 1))
@@ -1039,8 +1146,10 @@ class PickPlaceApp:
     def _on_mode_change(self):
         self._apply_mode_ui()
         mode     = self._mode.get()
-        defaults = DEFAULTS_SIM if mode == "sim" else DEFAULTS_PROD
-        label    = "Simulation" if mode == "sim" else "Produktion (echte Hardware)"
+        defaults = {"sim": DEFAULTS_SIM, "prod": DEFAULTS_PROD,
+                    "acc": DEFAULTS_ACC}[mode]
+        label    = {"sim": "Simulation", "prod": "Produktion (echte Hardware)",
+                    "acc": "Genauigkeitstest"}[mode]
         if messagebox.askyesno(
             "Standardwerte laden?",
             f"Standardwerte fuer '{label}' laden?\n"
@@ -1053,6 +1162,10 @@ class PickPlaceApp:
         if mode == "sim":
             bg        = "#e8f4f8"
             file_text = "Datei:  pick_and_placeV1_SIM.py   (iRC-Simulator + simulierter EYE+)"
+            eye_state = "disabled"
+        elif mode == "acc":
+            bg        = "#eaf7ea"
+            file_text = "Datei:  genauigkeitstestV1.py   (Genauigkeits-/Wiederholtest, ohne EYE+)"
             eye_state = "disabled"
         else:
             bg        = "#fff8e8"
@@ -1068,15 +1181,34 @@ class PickPlaceApp:
         self._file_var.set(file_text)
         for e in self._eye_entries:
             e.config(state=eye_state)
+
+        # EYE+-bezogene Anzeige nur in der Produktion sichtbar.
+        show_eye = (mode == "prod")
         try:
-            if mode == "sim":
-                self._led_eye_frame.grid_remove()
-                self._eye_section_frame.grid_remove()
-                self._recipe_sec.grid_remove()
-            else:
-                self._led_eye_frame.grid()
-                self._eye_section_frame.grid()
-                self._recipe_sec.grid()
+            for w in (self._led_eye_frame, self._eye_section_frame, self._recipe_sec):
+                w.grid() if show_eye else w.grid_remove()
+        except AttributeError:
+            pass
+
+        # Beim ersten Wechsel in die Produktion die echte EYE+-Rezeptliste
+        # einmal automatisch holen, damit alle Rezepte (inkl. V2) ohne Klick auf
+        # "Rezeptliste laden" im Dropdown stehen. Still, d.h. bei fehlender
+        # IP/Port oder nicht erreichbarem EYE+ kein Popup -- nur Log-Ausgabe.
+        # Danach nicht mehr automatisch (manueller Button bleibt moeglich).
+        if show_eye and not self._recipe_autoloaded:
+            if self._load_recipe_list(silent=True):
+                self._recipe_autoloaded = True
+
+        # Pick-and-Place-Sektionen (Aufgabe, Pick-Geometrie, Ablageorte, Cube)
+        # sind im Genauigkeitstest nicht relevant -> ausblenden. Stattdessen die
+        # Genauigkeitstest-Sektion mit den beiden Ablageorten zeigen.
+        is_acc = (mode == "acc")
+        try:
+            for w in (self._sec_aufgabe, self._sec_pickgeom,
+                      self._sec_place_normal, self._sec_place_endlos,
+                      self._sec_cube):
+                w.grid_remove() if is_acc else w.grid()
+            self._sec_acc.grid() if is_acc else self._sec_acc.grid_remove()
         except AttributeError:
             pass
 
@@ -1094,7 +1226,8 @@ class PickPlaceApp:
 
     def _reset_defaults(self):
         self._load_defaults(
-            DEFAULTS_SIM if self._mode.get() == "sim" else DEFAULTS_PROD)
+            {"sim": DEFAULTS_SIM, "prod": DEFAULTS_PROD,
+             "acc": DEFAULTS_ACC}[self._mode.get()])
 
     def _set_led(self, which: str, state: str):
         color = "#44cc44" if state == "green" else "#d94f4f"
@@ -1142,18 +1275,26 @@ class PickPlaceApp:
         disp = self._recipe_var.get().strip()
         return disp.split()[0] if disp else ""
 
-    def _load_recipe_list(self):
+    def _load_recipe_list(self, silent=False):
+        # silent=True wird beim automatischen Laden (Wechsel in die Produktion)
+        # genutzt: keine Fehler-Popups, stattdessen nur Log-Ausgaben.
+        # Rueckgabe: True, wenn ein Ladevorgang gestartet wurde, sonst False
+        # (IP/Port fehlt oder ungueltig). Das Auto-Laden setzt seinen One-Shot-
+        # Flag nur bei True, sodass es bei fehlender Konfiguration spaeter erneut
+        # versucht.
         ip   = self._vars["eye_ip"].get().strip()
         port = self._vars["eye_port"].get().strip()
         if not ip or not port:
-            messagebox.showinfo("Nicht verbunden",
-                                "EYE+ IP/Port nicht konfiguriert.")
-            return
+            if not silent:
+                messagebox.showinfo("Nicht verbunden",
+                                    "EYE+ IP/Port nicht konfiguriert.")
+            return False
         try:
             port_int = int(port)
         except ValueError:
-            messagebox.showerror("Fehler", "Ungültiger EYE+ Port.")
-            return
+            if not silent:
+                messagebox.showerror("Fehler", "Ungültiger EYE+ Port.")
+            return False
 
         def do_load():
             try:
@@ -1174,6 +1315,7 @@ class PickPlaceApp:
                     ("log", (f"[EYE+] Rezeptliste laden fehlgeschlagen: {e}", "err")))
 
         threading.Thread(target=do_load, daemon=True).start()
+        return True
 
     # ── Koordinaten-Eingabe ───────────────────────────────────────────────────
 
@@ -1276,6 +1418,17 @@ class PickPlaceApp:
                 errors.append("  'Safe-Joints' braucht genau 6 Werte.")
         except ValueError:
             errors.append("  'Safe-Joints' enthaelt ungueltige Werte.")
+        if mode == "acc":
+            for key, label in [
+                ("acc_p1x", "Ablageort 1 X"), ("acc_p1y", "Ablageort 1 Y"),
+                ("acc_p1z", "Ablageort 1 Z"), ("acc_p2x", "Ablageort 2 X"),
+                ("acc_p2y", "Ablageort 2 Y"), ("acc_p2z", "Ablageort 2 Z"),
+                ("acc_offset", "Anfahr-Offset Z"),
+            ]:
+                try:
+                    float(self._vars[key].get())
+                except ValueError:
+                    errors.append(f"  '{label}' muss eine Zahl sein.")
         if errors:
             messagebox.showerror("Eingabefehler",
                                  "Bitte korrigieren:\n\n" + "\n".join(errors))
@@ -1449,6 +1602,71 @@ class PickPlaceApp:
         FILL_WAIT_S        = float(cfg["fill_wait"])
         MOVE_VELOCITY      = float(cfg["velocity"])
         TEST_MODE          = cfg.get("test_mode") == "1" and mode == "prod"
+
+        # ── GENAUIGKEITSTEST ──────────────────────────────────────────────────
+        # Eigener Modus: Roboter bewegt EIN Teil endlos zwischen zwei Ablageorten
+        # hin und her. Keine EYE+-Verbindung; Bewegungsablauf in genauigkeitstestV1.
+        if mode == "acc":
+            P1 = (float(cfg["acc_p1x"]), float(cfg["acc_p1y"]), float(cfg["acc_p1z"]))
+            P2 = (float(cfg["acc_p2x"]), float(cfg["acc_p2y"]), float(cfg["acc_p2z"]))
+            ACC_OFFSET = float(cfg["acc_offset"])
+            TOOL       = (TOOL_A_DOWN, TOOL_B_DOWN, TOOL_C_DOWN)
+
+            robot = CriRobot(ROBOT_IP, ROBOT_PORT, log_fn=log)
+            self._robot_ref = robot
+            _CART_VEL_MAX  = 500.0
+            _JOINT_VEL_MAX = 100.0
+
+            log("=" * 56, "head")
+            log("  Genauigkeitstest  |  Roboter ohne EYE+", "head")
+            log(f"  Ort 1: {P1}   Ort 2: {P2}", "head")
+            log(f"  Roboter: {ROBOT_IP}:{ROBOT_PORT}", "head")
+            log("=" * 56, "head")
+
+            try:
+                if _acc_script is None:
+                    raise RuntimeError(
+                        "genauigkeitstestV1.py konnte nicht importiert werden.")
+
+                status("Verbinde ...")
+                log("\n[1] Verbinde Roboter ...", "info")
+                robot.connect()
+                check()
+                robot.init()
+                robot.set_override(MOVE_VELOCITY)
+                check()
+                led("robot", "green")
+
+                status("Genauigkeitstest laeuft (Endlos) ...")
+                log("\n[2] Genauigkeitstest startet (endlos — STOP zum Beenden) ...",
+                    "info")
+                prog(0, 0)   # Endlos: kein festes Ziel -> Balken neutral lassen
+
+                def on_cycle(n):
+                    q.put(("status", f"Genauigkeitstest laeuft — {n} Transfer(s)"))
+                    log(f"  === Transfer {n} abgeschlossen ===", "ok")
+
+                _acc_script.run_genauigkeitstest(
+                    robot, P1, P2, ACC_OFFSET, TOOL, SAFE_ROTATE_JOINTS,
+                    cart_vel=_CART_VEL_MAX, joint_vel=_JOINT_VEL_MAX,
+                    log=log, check=check, on_cycle=on_cycle)
+
+            except _StopException:
+                log("\n[ABBRUCH] durch Benutzer.", "err")
+                status("Abgebrochen.")
+            except Exception as exc:
+                msg = f"{type(exc).__name__}: {exc}"
+                log(f"\n[FEHLER]  {msg}", "err")
+                status(f"FEHLER: {msg}")
+            finally:
+                self._robot_ref = None
+                led("robot", "red")
+                try:
+                    robot.close()
+                except Exception:
+                    pass
+                log("\n[ENDE] Verbindung getrennt.", "info")
+            return
 
         if mode == "sim":
             eye    = SimulatedEyePlus(self._request_coord_from_worker, log_fn=log)

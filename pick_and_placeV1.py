@@ -45,13 +45,13 @@ ROBOT_PORT    = 3920
 NUM_PARTS     = 4
 
 # Produktionsbetrieb -> immer Rezept_Produktion.
-RECIPE_ID_PROD = "23217"            # Rezept_Produktion
+RECIPE_ID_PROD = "20870"            # Rezept_Produktion
 
 # --- Pick-Geometrie [mm / Grad] ---
 PICK_CENTER_X = 440.0
 PICK_CENTER_Y = -5.0
-SAFE_PICK_Z   = 150.0
-GRIP_Z        = 136.0
+SAFE_PICK_Z   = 170.0
+GRIP_Z        = 158.0
 
 TOOL_A_DOWN   = 180.0
 TOOL_B_DOWN   = 0.0
@@ -61,11 +61,11 @@ SAFE_ROTATE_JOINTS = [0.0, -18.7, 108.0, 0.0, 90.0, 0.0]
 ROTATE_DEG    = -90.0
 
 # --- Ablage [mm] ---
-PLACE_X_START = 0.0
-PLACE_X_STEP  = 50.0                # Schritt pro abgelegtem Teil
-PLACE_Y       = -300.0
-PLACE_Z_SAFE  = 150.0
-PLACE_Z_DROP  = 140.0
+PLACE_X_START = -132.8
+PLACE_X_STEP  = 40.0                # Schritt pro abgelegtem Teil
+PLACE_Y       = -392.5
+PLACE_Z_SAFE  = 90
+PLACE_Z_DROP  = 80.2
 
 # --- Cube-Fuellung ---
 MIN_PARTS_ON_PLATE = 1
@@ -73,7 +73,7 @@ FILL_FEEDER_CMD    = "feeder 1"
 FILL_WAIT_S        = 2.0
 
 # --- Bewegungsparameter ---
-MOVE_VELOCITY = 80.0                # Override in % (wird per CMD Override gesetzt)
+MOVE_VELOCITY = 50.0                # Override in % (wird per CMD Override gesetzt)
 
 
 # ==============================================================================
@@ -173,9 +173,12 @@ class EyePlusClient:
                     pass
         if "x" in fields and "y" in fields:
             rz = fields.get("rz", 0.0)
-            # Greifer dreht max. 180 Grad; bei rz > 180 wuerde er ueberdrehen.
+            # Greifer dreht nur +/-180 Grad, Teil-rz laeuft 0..359.99 und hat
+            # genau eine richtige Greif-Orientierung. Bei rz > 180 den
+            # aequivalenten negativen Winkel anfahren (rz-360, Bereich -180..0),
+            # also in die andere Richtung drehen. Bsp: rz=270 -> 270-360 = -90.
             if rz > 180.0:
-                rz -= 180.0
+                rz -= 360.0
             return True, fields["x"], fields["y"], rz
         return False, None, None, None
 
@@ -312,14 +315,57 @@ class CriRobot:
         return joints
 
     def rotate_a6(self, deg, velocity=100.0):
-        # Dreht nur A6 relativ (Wrist), Greifer bleibt senkrecht. So wird die
-        # Teil-Orientierung rz realisiert, ohne die kartesische Orientierung zu
-        # aendern (vermeidet das A6-Ueberdrehen durch IK-Mehrdeutigkeit).
-        body = (f"CMD Move RelativeJoint 0.0 0.0 0.0 0.0 0.0 {deg:.3f} "
-                f"0.0 0.0 0.0 {velocity:.1f}")
-        self._send_raw(body)
-        print(f"   [A6 rel    ] {deg:+.1f} Grad")
-        self._wait_motion_done()
+        # Dreht A6 um deg -- aber als ABSOLUTER Joint-Befehl (Ziel = Ist + deg)
+        # statt "Move RelativeJoint". Ein expliziter "CMD Move Joint" laesst
+        # dem Controller keinen Spielraum, auf eine aequivalente (um 180 Grad
+        # verdrehte) Loesung oder den "kuerzeren Weg" auszuweichen.
+        # Nach der Bewegung wird der erreichte Winkel verifiziert und bei
+        # Abweichung einmal nachkorrigiert.
+        j = self.read_joints()
+        if j is None:
+            # Fallback ohne Joint-Daten: relativer Befehl wie bisher.
+            body = (f"CMD Move RelativeJoint 0.0 0.0 0.0 0.0 0.0 {deg:.3f} "
+                    f"0.0 0.0 0.0 {velocity:.1f}")
+            self._send_raw(body)
+            print(f"   [A6 rel    ] {deg:+.1f} Grad (keine Joint-Daten, unverifiziert!)")
+            self._wait_motion_done()
+            return
+        target = j[5] + deg
+        # In den gueltigen A6-Bereich schieben (+/-360 ist dieselbe
+        # Orientierung, aendert also nichts am Greif-Winkel).
+        if target > 179.0:
+            target -= 360.0
+        elif target < -179.0:
+            target += 360.0
+        joints    = list(j)
+        joints[5] = target
+        print(f"   [A6 abs    ] {j[5]:+.1f} -> {target:+.1f} Grad  (delta {deg:+.1f})")
+        self.move_joints(joints, velocity)
+        self._verify_a6(target)
+
+    def _verify_a6(self, target, tol=2.0):
+        # Kontrolliert, ob A6 wirklich auf dem Sollwinkel steht. Faengt genau
+        # den Fall ab, dass der Controller eine andere (z.B. um 180 Grad
+        # gedrehte) Loesung gefahren ist.
+        j = self.read_joints(prefer_current=True)
+        if j is None:
+            print("   [A6 CHECK  ] WARN: keine Joint-Daten zur Verifikation.")
+            return
+        err = ((j[5] - target + 180.0) % 360.0) - 180.0
+        if abs(err) <= tol:
+            return
+        print(f"   [A6 CHECK  ] FEHLER: Ist {j[5]:+.1f}, Soll {target:+.1f}"
+              f" (Abweichung {err:+.1f} Grad) -> korrigiere.")
+        joints    = list(j)
+        joints[5] = j[5] - err
+        self.move_joints(joints)
+        j2 = self.read_joints(prefer_current=True)
+        if j2 is not None:
+            err2 = ((j2[5] - joints[5] + 180.0) % 360.0) - 180.0
+            if abs(err2) > tol:
+                raise RuntimeError(
+                    f"A6 laesst sich nicht auf den Sollwinkel stellen "
+                    f"(Restabweichung {err2:+.1f} Grad)")
 
     def move_base_relative(self, dx, dy, dz, velocity=500.0):
         # Relative kartesische Bewegung im Basis-Koordinatensystem. Orientierung
@@ -348,7 +394,15 @@ class CriRobot:
         self.sock.settimeout(1.0)
         while time.time() < deadline:
             text = self._buf.decode("ascii", errors="replace")
-            if "EXECEND" in text or "EXECERROR" in text:
+            if "EXECERROR" in text:
+                # Bewegung ist fehlgeschlagen (z.B. Achsgrenze, Singularitaet,
+                # MNE_OC). Frueher wurde das wie Erfolg behandelt -> Roboter
+                # greift dann in falscher Orientierung weiter. Jetzt abbrechen.
+                self._buf = b""
+                raise RuntimeError(
+                    "Controller meldet EXECERROR: Bewegung nicht ausgefuehrt. "
+                    "Naechster Schritt wuerde in falscher Pose ausgefuehrt.")
+            if "EXECEND" in text:
                 self._buf = b""
                 return
             try:
@@ -358,6 +412,62 @@ class CriRobot:
             except socket.timeout:
                 pass
         print("   [ROBOT     ] WARN: Timeout beim Warten auf Bewegungsende (EXECEND).")
+
+    def read_joints(self, timeout=2.0, prefer_current=False):
+        """Liest die aktuellen Achswinkel [A1..A6] aus dem CRI-STATUS-Frame.
+        Zwischen Bewegungen aufrufen. prefer_current=True bevorzugt die
+        Ist-Winkel (POSJOINTCURRENT) statt der Soll-Winkel -- noetig, um zu
+        pruefen, ob der Controller wirklich dorthin gefahren ist, wohin er
+        sollte. Gibt eine Liste mit 6 Werten zurueck oder None.
+        """
+        if prefer_current:
+            keys = ("POSJOINTCURRENT", "POSJOINTSETPOINT")
+        else:
+            keys = ("POSJOINTSETPOINT", "POSJOINTCURRENT")
+        deadline = time.time() + timeout
+        self.sock.settimeout(0.3)
+        while time.time() < deadline:
+            try:
+                chunk = self.sock.recv(4096)
+                if chunk:
+                    self._buf += chunk
+            except socket.timeout:
+                pass
+            text = self._buf.decode("ascii", errors="replace")
+            for key in keys:
+                best  = None
+                start = 0
+                while True:
+                    idx = text.find(key, start)
+                    if idx < 0:
+                        break
+                    end = text.find("CRIEND", idx)
+                    if end < 0:          # Frame noch unvollstaendig
+                        break
+                    vals = []
+                    for t in text[idx + len(key):end].split():
+                        try:
+                            vals.append(float(t))
+                        except ValueError:
+                            break
+                    if len(vals) >= 6:
+                        best = vals[:6]
+                    start = end + 6
+                if best is not None:
+                    return best
+        return None
+
+    def log_joints(self, tag):
+        """Diagnose: aktuelle Achswinkel loggen. A5-Vorzeichen = Handgelenk-
+        Konfiguration, A6 = tatsaechlich gefahrener Drehwinkel."""
+        j = self.read_joints()
+        if j is None:
+            snippet = self._buf.decode("ascii", errors="replace")[-160:]
+            print(f"   [JOINTS {tag:9}] <keine POSJOINT-Daten>  RAW: {snippet!r}")
+        else:
+            print(f"   [JOINTS {tag:9}] "
+                  f"A1={j[0]:7.2f} A2={j[1]:7.2f} A3={j[2]:7.2f} "
+                  f"A4={j[3]:7.2f} A5={j[4]:7.2f} A6={j[5]:7.2f}")
 
 
 # ==============================================================================
@@ -414,6 +524,13 @@ def main():
         picked    = 0
         next_part = (found, x, y, rz) if found else None
 
+        # Definierte Start-Konfiguration: einmal ueber SAFE-TO-ROTATE fahren,
+        # damit die erste SAFE-TO-PICK-Anfahrt reproduzierbar dieselbe
+        # Handgelenk-Konfiguration liefert wie alle folgenden (sonst koennte das
+        # erste Teil in einer geflippten Konfiguration gegriffen werden).
+        print("  Schritt: definierte Start-Konfiguration (SAFE-TO-ROTATE)")
+        robot.move_joints(list(SAFE_ROTATE_JOINTS))
+
         while picked < NUM_PARTS:
 
             # Kandidat sicherstellen
@@ -440,18 +557,33 @@ def main():
             print("  Schritt: SAFE-TO-PICK anfahren")
             robot.move_cartesian(PICK_CENTER_X, PICK_CENTER_Y, SAFE_PICK_Z,
                                  TOOL_A_DOWN, TOOL_B_DOWN, TOOL_C_DOWN)
+            robot.log_joints("safe-pick")
 
-            print("  Schritt: ueber Teil + auf Greifhoehe (z=140), greifen (rz per A6)")
+            # Absolute kartesische Anfahrt (bewaehrt). Die zuvor getestete
+            # RelativeBase-Fahrt in X/Y hat den MNE_OC-Fehler ausgeloest
+            # (Singularitaet / nicht ausfuehrbare Konfiguration). Erst per
+            # Diagnose klaeren, WO der 180-Grad-Flip entsteht, dann gezielt fixen.
+            print("  Schritt: ueber Teil + auf Greifhoehe, greifen (rz per A6)")
             robot.move_cartesian(x, y, SAFE_PICK_Z,
                                  TOOL_A_DOWN, TOOL_B_DOWN, TOOL_C_DOWN)
             robot.move_cartesian(x, y, GRIP_Z,
                                  TOOL_A_DOWN, TOOL_B_DOWN, TOOL_C_DOWN)
+            robot.log_joints("vor-A6")
             # Teil-Drehung rz nur ueber A6 (Greifer bleibt senkrecht). A6 bleibt
             # zunaechst gedreht: erst senkrecht hochfahren, dann auf dem Weg zur
             # Safe-To-Rotate-Position die Orientierung korrigieren (A6 zurueck).
             # 90-Grad = fester Greifer-Montage-Offset zwischen rz und A6.
             a6 = 90.0 - rz
+            # Auf (-180, 180] normalisieren: rz in (-180, 180] ergibt sonst
+            # a6 in [-90, 270) -- Werte > 180 liegen ausserhalb des A6-
+            # Verfahrbereichs, der Controller weicht dann auf eine
+            # Ersatzloesung aus (Ursache fuer 180-Grad-Fehlgriffe).
+            # a6 - 360 ist dieselbe Orientierung, also greif-identisch.
+            if a6 > 180.0:
+                a6 -= 360.0
+            print(f"   [DIAG      ] rz={rz:.2f} -> a6 kommandiert={a6:.2f}")
             robot.rotate_a6(a6)
+            robot.log_joints("greif")
             robot.gripper(close=True)
 
             print("  Schritt: senkrecht hoch (Greifer-Orientierung gehalten)")
@@ -459,6 +591,7 @@ def main():
 
             print("  Schritt: Orientierung korrigieren (A6 zurueck)")
             robot.rotate_a6(-a6)
+            robot.log_joints("derot")
 
             print("  Schritt: einfahren -> SAFE-TO-ROTATE")
             rotate_base = list(SAFE_ROTATE_JOINTS)
