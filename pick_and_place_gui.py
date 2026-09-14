@@ -9,7 +9,7 @@ import tkinter as tk
 from tkinter import ttk, scrolledtext, messagebox
 
 try:
-    from ultragay.CRI_Python_Lib.cri_lib import CRIController, CRIConnectionError
+    from libs.CRI_Python_Lib.cri_lib import CRIController, CRIConnectionError
     CRI_AVAILABLE = True
 except ImportError:
     CRI_AVAILABLE = False
@@ -198,7 +198,7 @@ class PickPlaceApp:
         if not CRI_AVAILABLE:
             messagebox.showerror(
                 "CRI-Lib nicht gefunden",
-                "ultragay/CRI_Python_Lib konnte nicht importiert werden.\n"
+                "libs/CRI_Python_Lib konnte nicht importiert werden.\n"
                 "Starte das Programm aus dem Projektordner:\n"
                 "  BA_PY_Skript\\"
             )

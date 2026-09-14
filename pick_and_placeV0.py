@@ -10,7 +10,7 @@ Voraussetzungen:
 
 import logging
 import random
-from ultragay.CRI_Python_Lib.cri_lib import CRIController, CRIConnectionError
+from libs.CRI_Python_Lib.cri_lib import CRIController, CRIConnectionError
 
 logging.basicConfig(level=logging.DEBUG, format="%(name)s %(levelname)s: %(message)s")
 # ─────────────────────────────────────────────────────────────────────────────

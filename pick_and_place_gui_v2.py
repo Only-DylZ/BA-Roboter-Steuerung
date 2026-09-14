@@ -17,7 +17,7 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:
-    from ultragay.CRI_Python_Lib.cri_lib import CRIController, CRIConnectionError
+    from libs.CRI_Python_Lib.cri_lib import CRIController, CRIConnectionError
     CRI_AVAILABLE = True
 except ImportError:
     CRI_AVAILABLE = False
@@ -1340,7 +1340,7 @@ class PickPlaceApp:
         if self._mode.get() == "sim" and not CRI_AVAILABLE:
             messagebox.showerror(
                 "CRI-Bibliothek fehlt",
-                "ultragay/CRI_Python_Lib konnte nicht geladen werden.\n"
+                "libs/CRI_Python_Lib konnte nicht geladen werden.\n"
                 "Starte das Programm aus dem Ordner 'BA_PY_Skript'.",
             )
             return

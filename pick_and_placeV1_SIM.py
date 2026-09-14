@@ -37,7 +37,7 @@ import logging
 import time
 import threading
 
-from ultragay.CRI_Python_Lib.cri_lib import CRIController, CRIConnectionError
+from libs.CRI_Python_Lib.cri_lib import CRIController, CRIConnectionError
 
 logging.basicConfig(level=logging.INFO, format="%(name)s %(levelname)s: %(message)s")
 
