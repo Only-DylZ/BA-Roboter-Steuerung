@@ -59,16 +59,16 @@ angesprochen, es kann nichts beschädigt werden.
 
 ### 2.1 Der Rechner muss im selben Netz hängen wie die Geräte
 
-Roboter und Kamera sind über Ethernet angebunden und haben feste IP-Adressen:
+Roboter und Controller sind über Ethernet angebunden und haben feste IP-Adressen:
 
 | Gerät | Standard-IP | Port | Wofür |
 |---|---|---|---|
 | igus ReBeL (Robotersteuerung) | `192.168.3.11` | `3920` | Bewegungsbefehle (CRI-Protokoll) |
-| Asyril EYE+ (Kamera/Controller) | `192.168.3.20` | `7171` | Bauteilkoordinaten |
+| Asyril EYE+ (Controller) | `192.168.3.20` | `7171` | Bauteilkoordinaten |
 | iRC-Simulator (lokal) | `127.0.0.1` | `3921` | nur Simulationsmodus |
 
 Damit die Verbindung klappt, braucht der PC eine **feste IP im selben
-Subnetz**, z. B. `192.168.3.100` mit Subnetzmaske `255.255.255.0`.
+Subnetz**, z. B. `192.168.3.30` mit Subnetzmaske `255.255.255.0`.
 
 **Verbindung vorab testen** (Eingabeaufforderung):
 
@@ -110,7 +110,7 @@ fordert sie beim Start automatisch an (`SetActive`), anschließend folgen
 - [ ] Roboter eingeschaltet, referenziert, keine Fehler in iRC
 - [ ] Not-Aus erreichbar und frei
 - [ ] Arbeitsbereich frei von Hindernissen
-- [ ] Greifer (Druckluft) angeschlossen
+- [ ] Greifer angeschlossen
 - [ ] Asycube eingeschaltet, Bauteile auf der Platte
 - [ ] EYE+ per `ping` erreichbar
 - [ ] Geschwindigkeit (Override) beim ersten Lauf **niedrig** setzen, z. B. 20 %
