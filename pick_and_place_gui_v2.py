@@ -501,7 +501,7 @@ class SimEyePoller:
 # ══════════════════════════════════════════════════════════════════════════════
 
 class CriRobot:
-    def __init__(self, ip, port, log_fn=None):
+    def __init__(self, ip, port, log_fn=None, stop_event=None):
         self.ip      = ip
         self.port    = port
         self._log    = log_fn or (lambda t, tag=None: print(t))
@@ -510,6 +510,9 @@ class CriRobot:
         self._msg_id = 1
         self._lock   = threading.Lock()
         self._alive  = False
+        # Wird von der GUI gesetzt (STOP-Button). _wait_motion_done bricht
+        # darauf ab, statt bis zum Timeout auf EXECEND zu warten.
+        self._stop_event = stop_event
 
     def connect(self):
         self.sock = socket.create_connection((self.ip, self.port), timeout=10)
@@ -638,6 +641,24 @@ class CriRobot:
         self._log(f"   [Greifer] {action}", "ok" if close else "info")
         time.sleep(1.2)   # warten bis Greifer-Mechanik fertig, bevor weiterbewegt wird
 
+    def stop_motion(self):
+        """Laufende Bewegung sofort abbrechen (CRI: 'CMD Move Stop').
+
+        Wird vom STOP-Button direkt aus dem GUI-Thread aufgerufen, waehrend der
+        Worker-Thread noch in _wait_motion_done haengt. Deshalb bewusst ohne
+        Antwort-Auswertung: _send_raw nimmt nur kurz das Lock zum Senden und
+        liest nicht vom Socket -- sonst wuerden zwei Threads gleichzeitig aus
+        self._buf lesen. Die Motoren bleiben bestromt, der Roboter ist danach
+        ohne erneutes Reset/Enable wieder fahrbereit.
+        """
+        if self.sock is None:
+            return
+        try:
+            self._send_raw("CMD Move Stop", wait_answer=False)
+            self._log("[ROBOT] STOP an Controller gesendet (CMD Move Stop).", "warn")
+        except OSError as e:
+            self._log(f"[ROBOT] STOP konnte nicht gesendet werden: {e}", "err")
+
     def _wait_motion_done(self, timeout=120.0):
         # Warten bis der Controller das Bewegungsende meldet (EXECEND-Frame).
         # Der vorausgegangene _send_raw hat den Puffer bereits geleert, daher
@@ -645,6 +666,13 @@ class CriRobot:
         deadline = time.time() + timeout
         self.sock.settimeout(1.0)
         while time.time() < deadline:
+            # Abbruch durch den STOP-Button: nicht bis zum Timeout weiterwarten.
+            # Der eigentliche Bewegungsstopp kommt aus stop_motion(); hier wird
+            # nur die Warteschleife verlassen, damit der Worker-Thread sofort
+            # zur naechsten check()-Pruefung kommt und _StopException wirft.
+            if self._stop_event is not None and self._stop_event.is_set():
+                self._buf = b""
+                return
             text = self._buf.decode("ascii", errors="replace")
             if "EXECEND" in text or "EXECERROR" in text:
                 self._buf = b""
@@ -664,11 +692,12 @@ class CriRobot:
 # ══════════════════════════════════════════════════════════════════════════════
 
 class CriControllerWrapper:
-    def __init__(self, ip, port, log_fn=None):
+    def __init__(self, ip, port, log_fn=None, stop_event=None):
         self.ip    = ip
         self.port  = port
         self._log  = log_fn or (lambda t, tag=None: print(t))
         self._ctrl = CRIController() if CRI_AVAILABLE else None
+        self._stop_event = stop_event   # analog zu CriRobot (STOP-Button)
 
     def connect(self):
         self._ctrl.connect(host=self.ip, port=self.port)
@@ -756,6 +785,20 @@ class CriControllerWrapper:
             self._log(f"[ROBOT] Override gesetzt: {percentage:.0f} %", "ok")
         else:
             self._log(f"[ROBOT] Override setzen fehlgeschlagen!", "warn")
+
+    def stop_motion(self):
+        """Laufende Bewegung sofort abbrechen (Simulation/iRC).
+
+        stop_move() der cri_lib sendet 'CMD Move Stop' -- derselbe Befehl wie
+        in CriRobot.stop_motion(), hier nur ueber die Bibliothek.
+        """
+        if self._ctrl is None:
+            return
+        try:
+            self._ctrl.stop_move()
+            self._log("[ROBOT] STOP an Controller gesendet (Move Stop).", "warn")
+        except Exception as e:
+            self._log(f"[ROBOT] STOP konnte nicht gesendet werden: {e}", "err")
 
     def gripper(self, close):
         self._ctrl.set_active_control(True)
@@ -1374,11 +1417,30 @@ class PickPlaceApp:
             self._status.set("Lauft ...")
 
     def _on_stop(self):
+        # Reihenfolge ist wichtig: erst das Stop-Event setzen (damit ein
+        # eventuell wartendes _wait_motion_done sofort zurueckkehrt und der
+        # Worker beim naechsten check() abbricht), dann den Bewegungsstopp an
+        # den Controller schicken.
         self._stop_event.set()
         self._pause_event.set()
         self._coord_event.set()
         self._coord_result = None
         self._status.set("Abbruch wird ausgefuehrt ...")
+
+        # Ohne diesen Befehl faehrt der Roboter die bereits an den Controller
+        # uebergebene Bewegung bis zum Zielpunkt zu Ende -- die Python-Events
+        # oben stoppen nur den Ablauf in der GUI, nicht die Hardware.
+        # In einem eigenen Thread, damit der GUI-Thread nicht blockiert und der
+        # Button sofort reagiert.
+        robot = self._robot_ref
+        if robot is not None:
+            def do_stop_motion():
+                try:
+                    robot.stop_motion()
+                except Exception as e:
+                    self._log_q.put(
+                        ("log", (f"[ROBOT] STOP fehlgeschlagen: {e}", "err")))
+            threading.Thread(target=do_stop_motion, daemon=True).start()
 
     # ── Hilfsmethoden ────────────────────────────────────────────────────────
 
@@ -1612,7 +1674,8 @@ class PickPlaceApp:
             ACC_OFFSET = float(cfg["acc_offset"])
             TOOL       = (TOOL_A_DOWN, TOOL_B_DOWN, TOOL_C_DOWN)
 
-            robot = CriRobot(ROBOT_IP, ROBOT_PORT, log_fn=log)
+            robot = CriRobot(ROBOT_IP, ROBOT_PORT, log_fn=log,
+                             stop_event=self._stop_event)
             self._robot_ref = robot
             _CART_VEL_MAX  = 500.0
             _JOINT_VEL_MAX = 100.0
@@ -1671,13 +1734,15 @@ class PickPlaceApp:
         if mode == "sim":
             eye    = SimulatedEyePlus(self._request_coord_from_worker, log_fn=log)
             poller = SimEyePoller(eye)
-            robot  = CriControllerWrapper(ROBOT_IP, ROBOT_PORT, log_fn=log)
+            robot  = CriControllerWrapper(ROBOT_IP, ROBOT_PORT, log_fn=log,
+                                          stop_event=self._stop_event)
         else:
             eye    = EyePlusClient(EYE_IP, EYE_PORT, log_fn=log,
                                    cmd_log_fn=eye_main_log)
             poller = EyePlusPoller(EYE_IP, EYE_PORT,
                                    status_log_fn=eye_poll_log)
-            robot  = CriRobot(ROBOT_IP, ROBOT_PORT, log_fn=log)
+            robot  = CriRobot(ROBOT_IP, ROBOT_PORT, log_fn=log,
+                              stop_event=self._stop_event)
         self._robot_ref = robot
 
         # Geschwindigkeit wird ausschliesslich ueber den iRC-Override gesteuert
