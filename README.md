@@ -27,7 +27,7 @@ Quellcode zu kennen. Alle Parameter lassen sich in der Oberfläche eingeben.
 
 ### Variante A — fertige EXE (kein Python nötig)
 
-1. `dist\PickAndPlace.exe` doppelklicken.
+1. Lade `PickAndPlace.exe` aus dem aktuellen Release runter und öffne es.
 2. Oben den **Modus** wählen.
 3. Links die Parameter prüfen (Standardwerte sind bereits gesetzt).
 4. **START** drücken.
