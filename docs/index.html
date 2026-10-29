@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bedienung – Pick-and-Place-Zelle (igus ReBeL + Asyril EYE+)</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦾</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f6f7f8; --paper:#ffffff; --ink:#1c2329; --muted:#5b6670; --line:#d6dbe0;
+  --signal:#f28c00; --signal-soft:#fff3e0; --steel:#2f4858; --ok:#2e7d4f;
+  color-scheme:light;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#141a1f; --paper:#1d252c; --ink:#e7ecef; --muted:#9aa7b1; --line:#33404a;
+    --signal:#ff9f2e; --signal-soft:#3a2a14; --steel:#9cc3d9; --ok:#6cc28f; color-scheme:dark; }
+}
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-padding-top:calc(env(safe-area-inset-top,0px) + 60px)}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font:16px/1.6 "IBM Plex Sans",system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif}
+code,.mono{font-family:"IBM Plex Mono",ui-monospace,Consolas,"Courier New",monospace;font-size:.95em}
+a{color:var(--steel);text-underline-offset:2px}
+a:focus-visible,button:focus-visible{outline:3px solid var(--signal);outline-offset:2px}
+.wrap{max-width:760px;margin:0 auto;padding:0 18px}
+
+header{background:var(--steel);color:#fff;padding:28px 0 22px}
+@media (prefers-color-scheme: dark){header{background:#22323d}}
+header h1{margin:0;font-size:1.65rem;line-height:1.2;font-weight:700}
+header p{margin:.4rem 0 0;opacity:.85}
+.stripe{height:8px;background:repeating-linear-gradient(-45deg,var(--signal) 0 14px,#1c2329 14px 28px)}
+
+nav{position:sticky;top:0;z-index:5;background:var(--paper);border-bottom:1px solid var(--line)}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--paper)}
+nav .wrap{display:flex;gap:6px;overflow-x:auto;padding-top:10px;padding-bottom:10px;scrollbar-width:none}
+nav a{flex:none;text-decoration:none;color:var(--ink);font-size:.9rem;font-weight:500;
+  padding:6px 12px;border:1px solid var(--line);border-radius:999px;background:var(--bg)}
+
+main{padding:22px 0 40px}
+section{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:20px 20px 8px;margin:0 0 18px}
+h2{margin:0 0 .6rem;font-size:1.25rem;line-height:1.3}
+h3{margin:1.2rem 0 .4rem;font-size:1.02rem}
+p{margin:0 0 .9rem}
+
+/* IP-Tabelle: das Wichtigste zuerst */
+.ip{width:100%;border-collapse:collapse;margin:.2rem 0 1rem}
+.ip th,.ip td{text-align:left;padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+.ip th{font-size:.85rem;color:var(--muted);font-weight:500}
+.ip td:first-child{font-weight:600}
+.copy{font:inherit;font-family:"IBM Plex Mono",ui-monospace,Consolas,monospace;font-size:1rem;font-weight:500;
+  color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:2px 8px;cursor:pointer}
+.copy.done{border-color:var(--ok);color:var(--ok)}
+.scroll{overflow-x:auto}
+
+ol.steps{list-style:none;counter-reset:s;margin:0 0 1rem;padding:0}
+ol.steps>li{counter-increment:s;position:relative;padding:0 0 14px 44px}
+ol.steps>li::before{content:counter(s);position:absolute;left:0;top:0;width:30px;height:30px;border-radius:50%;
+  background:var(--steel);color:var(--paper);font-weight:700;display:grid;place-items:center;font-size:.95rem}
+ol.steps>li strong{display:block}
+
+.note{border-left:5px solid var(--signal);background:var(--signal-soft);padding:12px 14px;border-radius:0 8px 8px 0;margin:0 0 1rem}
+.note p:last-child{margin:0}
+pre{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:12px;overflow-x:auto;margin:0 0 1rem}
+.two{display:grid;gap:14px;grid-template-columns:1fr}
+@media (min-width:640px){.two{grid-template-columns:1fr 1fr}}
+.box{border:1px solid var(--line);border-radius:8px;padding:14px}
+.box h3{margin-top:0}
+.btn{display:inline-block;text-decoration:none;font-weight:600;color:#fff;background:var(--steel);
+  padding:9px 14px;border-radius:8px;margin:2px 6px 10px 0}
+@media (prefers-color-scheme: dark){.btn{color:#141a1f}}
+ul.check{padding-left:1.2rem;margin:0 0 1rem}
+footer{color:var(--muted);font-size:.88rem;padding:0 0 30px}
+
+@media print{
+  nav,.stripe,.btn{display:none}
+  body{background:#fff;color:#000;font-size:11pt}
+  header{background:#fff;color:#000;padding:0 0 8px;border-bottom:2px solid #000}
+  section{border:none;padding:0;margin:0 0 14px;break-inside:avoid-page}
+  .copy{border:none;padding:0;background:none}
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <h1>Pick-and-Place-Zelle – Bedienung</h1>
+    <p>igus ReBeL 6-DOF + Asyril EYE+ / Asycube · Kurzanleitung vom Einschalten bis zum laufenden Zyklus</p>
+  </div>
+</header>
+<div class="stripe" aria-hidden="true"></div>
+<nav aria-label="Abschnitte">
+  <div class="wrap">
+    <a href="#netzwerk">IP-Adressen</a>
+    <a href="#einschalten">Einschalten</a>
+    <a href="#pc">PC einrichten</a>
+    <a href="#eyeplus">EYE+ Studio</a>
+    <a href="#irc">iRC</a>
+    <a href="#software">Software</a>
+    <a href="#betrieb">Betrieb</a>
+    <a href="#aus">Ausschalten</a>
+    <a href="#hilfe">Fehler</a>
+  </div>
+</nav>
+
+<main class="wrap">
+
+<section id="netzwerk">
+  <h2>IP-Adressen</h2>
+  <p>Alle Geräte hängen über LAN-Kabel am selben Switch im Subnetz <code>192.168.3.x</code>. Antippen kopiert die Adresse.</p>
+  <div class="scroll">
+  <table class="ip">
+    <thead><tr><th>Gerät</th><th>IP-Adresse</th><th>Port</th><th>Wofür</th></tr></thead>
+    <tbody>
+      <tr><td>Asyril EYE+ Controller</td><td><button class="copy">192.168.3.20</button></td><td class="mono">7171</td><td>EYE+ Studio (Browser), Bauteilkoordinaten</td></tr>
+      <tr><td>igus ReBeL (Steuerung im Sockel)</td><td><button class="copy">192.168.3.11</button></td><td class="mono">3920</td><td>iRC, Bewegungsbefehle</td></tr>
+      <tr><td>iRC-Simulation (lokal)</td><td><button class="copy">127.0.0.1</button></td><td class="mono">3921</td><td>nur Modus „Simulation“</td></tr>
+      <tr><td>Eigener PC</td><td class="mono">192.168.3.<b>x</b></td><td>–</td><td>x = freie Zahl 2–254, nicht 11 oder 20 (bisher: 30)</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>Subnetzmaske am PC: <code>255.255.255.0</code> · Gateway und DNS leer lassen.</p>
+  <div class="note"><p>Der EYE+ Controller hat ab Werk die Adresse <code>192.168.1.50</code>. Falls er zurückgesetzt wurde, ist er nur dort erreichbar – dann den PC vorübergehend auf <code>192.168.1.x</code> stellen.</p></div>
+</section>
+
+<section id="einschalten">
+  <h2>Anlage einschalten</h2>
+  <ol class="steps">
+    <li><strong>Schaltkasten anstecken</strong>Stecker des Schaltkastens in die dreiphasige Starkstromsteckdose (400 V) im Labor stecken.</li>
+    <li><strong>Hauptschalter einschalten</strong>Den Hauptschalter außen am Schaltkasten auf ON drehen. Danach leuchten die Asyril-Komponenten (EYE+ Controller, Asycube, Asyfill). Der Controller braucht etwa eine Minute zum Hochfahren.</li>
+    <li><strong>Switch einschalten</strong>Netzteil des Netzwerk-Switches einstecken. Controller und Roboter müssen per LAN-Kabel am Switch hängen.</li>
+    <li><strong>igus ReBeL an Strom anstecken</strong>Netzteil des Roboters in die Steckdose stecken.</li>
+    <li><strong>On-Knopf am Sockel drücken</strong>Der Knopf sitzt am Sockel des ReBeL. Not-Aus muss entriegelt sein.</li>
+    <li><strong>PC mit dem Switch verbinden</strong>LAN-Kabel vom PC in einen freien Port des Switches stecken und die IP wie unten einstellen.</li>
+  </ol>
+</section>
+
+<section id="pc">
+  <h2>PC einrichten (feste IP)</h2>
+  <p>Ohne feste IP im Subnetz <code>192.168.3.x</code> erreicht der PC weder Roboter noch Controller.</p>
+  <ol class="steps">
+    <li><strong>Netzwerkverbindungen öffnen</strong><kbd>Win</kbd> + <kbd>R</kbd> → <code>ncpa.cpl</code> → Enter.</li>
+    <li><strong>Ethernet-Adapter wählen</strong>Rechtsklick auf den LAN-Adapter → Eigenschaften → „Internetprotokoll, Version 4 (TCP/IPv4)“ → Eigenschaften.</li>
+    <li><strong>Adresse eintragen</strong>„Folgende IP-Adresse verwenden“: IP-Adresse <code>192.168.3.x</code>, Subnetzmaske <code>255.255.255.0</code>, Standardgateway leer → OK.</li>
+    <li><strong>Verbindung testen</strong>In der Eingabeaufforderung (<code>cmd</code>):</li>
+  </ol>
+<pre><code>ping 192.168.3.11
+ping 192.168.3.20</code></pre>
+  <p>Antwortet ein Gerät nicht, liegt es an Kabel, IP-Einstellung oder Stromversorgung – die Steuerungssoftware kann das nicht ausgleichen. Nach der Arbeit die IP am PC wieder auf „automatisch beziehen“ stellen, sonst funktioniert das normale Netz nicht.</p>
+</section>
+
+<section id="eyeplus">
+  <h2>EYE+ Studio (Kamera, Kalibrierung, Rezepte)</h2>
+  <p>EYE+ Studio läuft direkt auf dem Controller, es muss nichts installiert werden.</p>
+  <ol class="steps">
+    <li><strong>PC am Switch, IP eingestellt</strong>Siehe oben.</li>
+    <li><strong>Browser öffnen</strong>Die IP des Controllers in die Adresszeile eingeben: <code>http://192.168.3.20</code></li>
+    <li><strong>Startseite</strong>Von dort erreicht man Camera Configuration, Hand-Eye Calibration und Recent Recipes.</li>
+  </ol>
+  <div class="note"><p>Wie viele Teile auf der Plattform liegen sollen und wie der Asycube rüttelt, steht im Rezept. Das lässt sich nur in EYE+ Studio ändern, nicht in der Steuerungssoftware.</p></div>
+  <a class="btn" href="https://doc.eyeplus.asyril.com/de/5.4/">EYE+ Dokumentation (Asyril)</a>
+</section>
+
+<section id="irc">
+  <h2>iRC – Roboter direkt ansteuern</h2>
+  <p>igus Robot Control (iRC) ist die kostenlose Herstellersoftware. Damit wird der Roboter von Hand verfahren, referenziert, Fehler quittiert und Positionen abgelesen (z. B. für die Hand-Auge-Kalibrierung). Außerdem enthält sie die Simulation, die der Modus „Simulation“ benötigt.</p>
+  <ol class="steps">
+    <li><strong>iRC herunterladen</strong>Über das Formular bei igus, kostenlos.</li>
+    <li><strong>Mit dem Roboter verbinden</strong>ReBeL 6-DOF wählen und mit der Steuerung unter <code>192.168.3.11</code> verbinden.</li>
+    <li><strong>Roboter bereit machen</strong>Fehler zurücksetzen (Reset), Motoren freigeben (Enable), Roboter referenzieren. Erst dann nimmt er Bewegungsbefehle an.</li>
+  </ol>
+  <p>iRC darf beim Betrieb der Steuerungssoftware offen bleiben (empfohlen, wegen Fehlermeldungen im Klartext). Die Software holt sich beim Start automatisch die Kontrolle über den Roboter.</p>
+  <a class="btn" href="https://www.igus.com/automation/robot-control">iRC bei igus</a>
+</section>
+
+<section id="software">
+  <h2>Steuerungssoftware von GitHub</h2>
+  <div class="two">
+    <div class="box">
+      <h3>Nur bedienen</h3>
+      <p>Fertige <code>PickAndPlace.exe</code> aus dem aktuellen Release herunterladen und starten. Python wird nicht benötigt.</p>
+      <a class="btn" href="https://github.com/Only-DylZ/BA-Roboter-Steuerung/releases/latest">EXE herunterladen</a>
+    </div>
+    <div class="box">
+      <h3>Weiterentwickeln</h3>
+      <p>Ganzes Repository herunterladen (Code → Download ZIP oder <code>git clone</code>). Benötigt Python 3.10+ unter Windows, keine Zusatzpakete.</p>
+      <a class="btn" href="https://github.com/Only-DylZ/BA-Roboter-Steuerung">Repository</a>
+    </div>
+  </div>
+  <h3>Aus dem Quelltext starten</h3>
+<pre><code>git clone https://github.com/Only-DylZ/BA-Roboter-Steuerung.git
+cd BA-Roboter-Steuerung
+python pick_and_place_gui_v2.py</code></pre>
+  <p>Immer aus dem eigenen Ordner starten, sonst wird die Roboter-Bibliothek in <code>libs/</code> nicht gefunden.</p>
+  <h3>Neue EXE bauen</h3>
+  <div class="note"><p>Die EXE ist eine eingefrorene Kopie des Codes. Skript geändert → EXE neu bauen, sonst läuft ohne Warnung der alte Stand.</p></div>
+  <ol class="steps">
+    <li><strong><code>build_exe.bat</code> doppelklicken</strong>Prüft Python, installiert bei Bedarf PyInstaller und baut die EXE (dauert einige Minuten).</li>
+    <li><strong>Ergebnis</strong>Die neue Datei liegt unter <code>dist\PickAndPlace.exe</code>.</li>
+    <li><strong>Optional veröffentlichen</strong>Änderungen committen und die neue EXE als Release auf GitHub hochladen, damit der Download-Link oben aktuell bleibt.</li>
+  </ol>
+  <p>Ausführliche Doku zu allen Parametern: README im Repository.</p>
+</section>
+
+<section id="betrieb">
+  <h2>Betrieb</h2>
+  <ol class="steps">
+    <li><strong>Modus wählen</strong>Simulation (iRC-Simulation + simuliertes EYE+), Produktion (reale Hardware) oder Genauigkeitstest (realer Roboter ohne EYE+). Wer die Anlage nicht kennt, beginnt mit Simulation.</li>
+    <li><strong>Parameter prüfen</strong>„Standardwerte laden“ setzt die hinterlegten Werte, inklusive der IP-Adressen.</li>
+    <li><strong>START drücken</strong>Das Live-Terminal rechts zeigt jeden Schritt.</li>
+  </ol>
+  <h3>Vor dem ersten Produktionslauf</h3>
+  <ul class="check">
+    <li>Roboter eingeschaltet, referenziert, keine Fehler in iRC</li>
+    <li>Not-Aus erreichbar und frei, Arbeitsbereich frei</li>
+    <li>Greifer angeschlossen, Bauteile auf dem Asycube</li>
+    <li>Beide Geräte per <code>ping</code> erreichbar</li>
+    <li>Geschwindigkeit (Override) beim ersten Lauf niedrig, z. B. 20 %</li>
+  </ul>
+</section>
+
+<section id="aus">
+  <h2>Ausschalten</h2>
+  <ol class="steps">
+    <li><strong>Ablauf stoppen</strong>In der Steuerungssoftware stoppen und Programm schließen, Roboter in sichere Stellung fahren.</li>
+    <li><strong>Roboter aus</strong>Am Sockel ausschalten, Netzteil ausstecken.</li>
+    <li><strong>Schaltkasten aus</strong>Hauptschalter außen am Schaltkasten auf OFF drehen, Stecker ziehen.</li>
+    <li><strong>Switch aus</strong>Netzteil ausstecken. Am PC die IP wieder auf automatisch stellen.</li>
+  </ol>
+</section>
+
+<section id="hilfe">
+  <h2>Wenn etwas nicht geht</h2>
+  <h3>Ping kommt nicht zurück</h3>
+  <p>Kabel am Switch prüfen, IP und Subnetzmaske am PC prüfen, Gerät eingeschaltet? WLAN am PC testweise ausschalten.</p>
+  <h3>EYE+ Studio lädt nicht</h3>
+  <p>Controller ist noch nicht hochgefahren oder steht auf Werks-IP <code>192.168.1.50</code>.</p>
+  <h3>Doppelklick auf die EXE bewirkt nichts</h3>
+  <p>Die EXE hat kein Konsolenfenster und zeigt Startfehler nicht an. Über Python starten (siehe oben), dann steht die Ursache im Klartext da.</p>
+  <h3>„libs/CRI_Python_Lib konnte nicht geladen werden“</h3>
+  <p>Aus dem falschen Ordner gestartet oder der Ordner <code>libs</code> fehlt.</p>
+  <h3>Roboter fährt nicht</h3>
+  <p>In iRC nachsehen: Fehler aktiv, nicht referenziert oder Not-Aus gedrückt.</p>
+</section>
+
+</main>
+<footer class="wrap">
+  <p>Erstellt im Rahmen der Bachelorarbeit von Florian Hoog (2026): „Entwicklung und Implementierung eines kamerabasierten Pick-and-Place-Systems zur automatisierten Handhabung von Elektrolysezellkomponenten“. Quelltext und README: <a href="https://github.com/Only-DylZ/BA-Roboter-Steuerung">github.com/Only-DylZ/BA-Roboter-Steuerung</a>. Diese Seite lässt sich über das Druckmenü des Browsers als PDF speichern.</p>
+</footer>
+
+<script>
+document.querySelectorAll('.copy').forEach(function(b){
+  b.addEventListener('click',function(){
+    var t=b.textContent;
+    if(!navigator.clipboard){return;}
+    navigator.clipboard.writeText(t).then(function(){
+      b.classList.add('done');b.textContent='kopiert';
+      setTimeout(function(){b.textContent=t;b.classList.remove('done');},1200);
+    }).catch(function(){});
+  });
+});
+</script>
+</body>
+</html>
