@@ -1,0 +1,19 @@
+[project]
+name = "cri_lib"
+dynamic = ["version"]
+description = "Client library for accessing igus Robot Control via CRI network interface."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+    { name = "Bastian Richter", email = "brichter@igus.net" },
+]
+dependencies = []
+
+[tool.setuptools]
+packages = ["cri_lib"]
+
+[tool.setuptools.package-data]
+"cri_lib" = ["py.typed"]
+
+[tool.isort]
+profile = "black"

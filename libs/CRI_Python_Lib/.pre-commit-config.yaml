@@ -1,0 +1,29 @@
+exclude: \.(html|js)$
+repos:
+- repo: https://github.com/pre-commit/pre-commit-hooks
+  rev: v5.0.0
+  hooks:
+    - id: check-merge-conflict
+    - id: check-toml
+    - id: check-yaml
+    - id: end-of-file-fixer
+    - id: trailing-whitespace
+- repo: https://github.com/pre-commit/mirrors-mypy
+  rev: v1.15.0
+  hooks:
+  -   id: mypy
+      exclude: 'test_.*?\.py$'
+- repo: https://github.com/astral-sh/ruff-pre-commit
+  rev: v0.10.0
+  hooks:
+    # Run the formatter.
+    - id: ruff-format
+- repo: https://github.com/psf/black
+  rev: 25.1.0
+  hooks:
+    - id: black
+- repo: https://github.com/PyCQA/isort
+  rev: 6.0.1
+  hooks:
+    - id: isort
+      name: isort
